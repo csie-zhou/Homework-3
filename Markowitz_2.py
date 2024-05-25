@@ -55,12 +55,13 @@ class MyPortfolio:
     NOTE: You can modify the initialization function
     """
 
-    def __init__(self, price, exclude, lookback=50, gamma=0):
+    def __init__(self, price, exclude, lookback=50, gamma=0, rebalance_period=21):
         self.price = price
         self.returns = price.pct_change().fillna(0)
         self.exclude = exclude
         self.lookback = lookback
         self.gamma = gamma
+        self.rebalance_period = rebalance_period
 
     def calculate_weights(self):
         # Get the assets by excluding the specified column
@@ -74,7 +75,40 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+       # Calculate rolling volatility (standard deviation)
+        rolling_volatility = self.returns[assets].rolling(
+            window=self.lookback).std()
 
+        # Calculate inverse volatility
+        inverse_volatility = 1 / rolling_volatility
+
+        # Normalize inverse volatilities to sum to 1
+        sum_inverse_volatility = inverse_volatility.sum(axis=1)
+        weights = inverse_volatility.div(sum_inverse_volatility, axis=0)
+
+        # Momentum Strategy: Apply a momentum factor by scaling weights with recent returns
+        momentum = self.returns[assets].rolling(window=self.lookback).mean()
+        momentum_factor = momentum.div(momentum.sum(axis=1), axis=0)
+
+        # Combine Risk Parity and Momentum
+        combined_weights = (1 - self.gamma) * weights + \
+            self.gamma * momentum_factor
+
+        # Rebalance periodically
+        rebalanced_weights = combined_weights.resample(
+            f'{self.rebalance_period}D').first()
+        rebalanced_weights = rebalanced_weights.ffill().reindex(
+            self.price.index).fillna(method='ffill')
+
+        # Ensure weights sum to 1
+        rebalanced_weights = rebalanced_weights.div(
+            rebalanced_weights.sum(axis=1), axis=0)
+
+        # Store the calculated portfolio weights
+        self.portfolio_weights = rebalanced_weights
+
+        # Include the excluded column with zero weights
+        self.portfolio_weights[self.exclude] = 0
         """
         TODO: Complete Task 4 Above
         """
@@ -103,6 +137,12 @@ class MyPortfolio:
 
         return self.portfolio_weights, self.portfolio_returns
 
+    # def calculate_sharpe_ratio(self, returns, risk_free_rate=0):
+    #     # Calculate the Sharpe Ratio
+    #     excess_returns = returns - risk_free_rate
+    #     sharpe_ratio = excess_returns.mean() / excess_returns.std() * np.sqrt(252)
+    #     return sharpe_ratio
+
 
 """
 Assignment Judge
@@ -121,7 +161,8 @@ class AssignmentJudge:
         _, ax = plt.subplots()
         returns = price.pct_change().fillna(0)
         (1 + returns["SPY"]).cumprod().plot(ax=ax, label="SPY")
-        (1 + strategy[1]["Portfolio"]).cumprod().plot(ax=ax, label=f"MyPortfolio")
+        (1 + strategy[1]["Portfolio"]
+         ).cumprod().plot(ax=ax, label=f"MyPortfolio")
 
         ax.set_title("Cumulative Returns")
         ax.set_xlabel("Date")

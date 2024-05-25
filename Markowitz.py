@@ -61,12 +61,22 @@ class EqualWeightPortfolio:
     def calculate_weights(self):
         # Get the assets by excluding the specified column
         assets = df.columns[df.columns != self.exclude]
-        self.portfolio_weights = pd.DataFrame(index=df.index, columns=df.columns)
+        self.portfolio_weights = pd.DataFrame(
+            index=df.index, columns=df.columns)
 
         """
         TODO: Complete Task 1 Below
         """
+        # Calculate the equal weight for each asset
+        equal_weight = 1 / len(assets)
 
+        # Assign the equal weight to each asset in the portfolio_weights DataFrame
+        for asset in assets:
+            self.portfolio_weights[asset] = equal_weight
+        # print("assets")
+        # print(assets)
+        # print("eqw")
+        # print(equal_weight)
         """
         TODO: Complete Task 1 Above
         """
@@ -112,11 +122,52 @@ class RiskParityPortfolio:
         assets = df.columns[df.columns != self.exclude]
 
         # Calculate the portfolio weights
-        self.portfolio_weights = pd.DataFrame(index=df.index, columns=df.columns)
+        self.portfolio_weights = pd.DataFrame(
+            index=df.index, columns=df.columns)
 
         """
         TODO: Complete Task 2 Below
         """
+        # total_volatility = sum(1 / df_returns.std())
+        # for asset in assets:
+        #     self.portfolio_weights[asset] = 1 / \
+        #         (df_returns.std()[asset] * total_volatility)
+
+        for i in range(self.lookback + 1, len(df)):
+            R_n = df_returns.copy()[assets].iloc[i - self.lookback: i]
+
+            volatility = R_n.std().values
+            inverse_volatility = 1 / volatility
+
+            weights = inverse_volatility / inverse_volatility.sum()
+            self.portfolio_weights.loc[df.index[i], assets] = weights
+
+        # # Calculate rolling volatility (standard deviation)
+        # rolling_volatility = df_returns[assets].rolling(
+        #     window=self.lookback).std()
+
+        # # Calculate inverse volatility
+        # inverse_volatility = 1 / rolling_volatility
+
+        # # Normalize inverse volatilities to sum to 1
+        # sum_inverse_volatility = inverse_volatility.sum(axis=1)
+        # # print(sum_inverse_volatility)
+        # weights = inverse_volatility.div(
+        #     sum_inverse_volatility, axis=0)
+        # weights = weights.div(weights.sum(axis=1), axis=0)
+        # self.portfolio_weights = weights
+        # self.portfolio_weights[self.exclude] = 0
+
+        # print("assets")
+        # print(asset)
+        # print("df")
+        # print(df_returns)
+        # print("volatilities")
+        # print(volatilities)
+        # print("inv_vols")
+        # print(inv_vols)
+        # print("sum_inv_vols")
+        # print(sum_inv_vols)
 
         """
         TODO: Complete Task 2 Above
@@ -165,10 +216,11 @@ class MeanVariancePortfolio:
         assets = df.columns[df.columns != self.exclude]
 
         # Calculate the portfolio weights
-        self.portfolio_weights = pd.DataFrame(index=df.index, columns=df.columns)
+        self.portfolio_weights = pd.DataFrame(
+            index=df.index, columns=df.columns)
 
         for i in range(self.lookback + 1, len(df)):
-            R_n = df_returns.copy()[assets].iloc[i - self.lookback : i]
+            R_n = df_returns.copy()[assets].iloc[i - self.lookback: i]
             self.portfolio_weights.loc[df.index[i], assets] = self.mv_opt(
                 R_n, self.gamma
             )
@@ -190,10 +242,16 @@ class MeanVariancePortfolio:
                 TODO: Complete Task 3 Below
                 """
 
-                # Sample Code: Initialize Decision w and the Objective
-                # NOTE: You can modify the following code
-                w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+                # Initialize Decision Variables
+                w = model.addMVar(n, name="w")
+
+                # Set the Objective Function
+                obj = mu.T @ w - (gamma / 2) * w.T @ Sigma @ w
+                model.setObjective(obj, gp.GRB.MAXIMIZE)
+
+                # Add Constraints
+                model.addConstr(w.sum() == 1)  # Sum of weights = 1
+                model.addConstr(w >= 0)  # Non-negative weights
 
                 """
                 TODO: Complete Task 3 Below
@@ -260,7 +318,8 @@ class Helper:
             MeanVariancePortfolio("SPY").get_results(),
             MeanVariancePortfolio("SPY", gamma=100).get_results(),
             MeanVariancePortfolio("SPY", lookback=100).get_results(),
-            MeanVariancePortfolio("SPY", lookback=100, gamma=100).get_results(),
+            MeanVariancePortfolio("SPY", lookback=100,
+                                  gamma=100).get_results(),
         ]
 
     def plot_performance(self, strategy_list=None):
@@ -268,8 +327,10 @@ class Helper:
         _, ax = plt.subplots()
 
         (1 + df_returns["SPY"]).cumprod().plot(ax=ax, label="SPY")
-        (1 + self.eqw[1]["Portfolio"]).cumprod().plot(ax=ax, label="equal_weight")
-        (1 + self.rp[1]["Portfolio"]).cumprod().plot(ax=ax, label="risk_parity")
+        (1 + self.eqw[1]["Portfolio"]
+         ).cumprod().plot(ax=ax, label="equal_weight")
+        (1 + self.rp[1]["Portfolio"]
+         ).cumprod().plot(ax=ax, label="risk_parity")
 
         if strategy_list != None:
             for i, strategy in enumerate(strategy_list):
@@ -351,7 +412,8 @@ class AssignmentJudge:
             MeanVariancePortfolio("SPY").get_results()[0],
             MeanVariancePortfolio("SPY", gamma=100).get_results()[0],
             MeanVariancePortfolio("SPY", lookback=100).get_results()[0],
-            MeanVariancePortfolio("SPY", lookback=100, gamma=100).get_results()[0],
+            MeanVariancePortfolio("SPY", lookback=100,
+                                  gamma=100).get_results()[0],
         ]
 
     def check_dataframe_similarity(self, df1, df2, tolerance=0.01):
@@ -378,7 +440,8 @@ class AssignmentJudge:
 
     def compare_dataframe_list(self, std_ans_list, ans_list, tolerance=0.01):
         if len(std_ans_list) != len(ans_list):
-            raise ValueError("Both lists must have the same number of DataFrames.")
+            raise ValueError(
+                "Both lists must have the same number of DataFrames.")
 
         results = []
         for df1, df2 in zip(std_ans_list, ans_list):
