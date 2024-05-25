@@ -9,6 +9,7 @@ import quantstats as qs
 import gurobipy as gp
 import warnings
 import argparse
+from scipy.optimize import minimize
 
 """
 Project Setup
@@ -75,6 +76,59 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        # Calculate log returns
+        log_ret = np.log(self.price / self.price.shift(1))
+
+        # Define the number of days for annualization
+        days = 252
+
+        def get_ret_vol_sr(weights):
+            """
+            Takes in weights, returns array of return, volatility, sharpe ratio
+            """
+            weights = np.array(weights)
+            ret = np.sum(log_ret[assets].mean() * weights) * days
+            vol = np.sqrt(np.dot(weights.T, np.dot(
+                log_ret[assets].cov() * days, weights)))
+            sr = ret / vol
+            return np.array([ret, vol, sr])
+
+        def neg_sharpe(weights):
+            """
+            Returns the negative Sharpe ratio (for minimization)
+            """
+            return get_ret_vol_sr(weights)[2] * -1
+
+        def check_sum(weights):
+            """
+            Returns 0 if sum of weights is 1.0
+            """
+            return np.sum(weights) - 1
+
+        cons = ({'type': 'eq', 'fun': check_sum})
+        bounds = tuple((0, 1) for _ in range(len(assets)))
+        init_guess = [1. / len(assets)] * len(assets)
+
+        for i in range(self.lookback, len(self.price)):
+            if i % self.rebalance_period == 0:
+                # Slice the lookback window
+                lookback_data = log_ret.iloc[i-self.lookback:i]
+
+                # Calculate mean and covariance
+                mean_returns = lookback_data[assets].mean()
+                cov_matrix = lookback_data[assets].cov()
+
+                # Optimize weights using mathematical optimization
+                opt_results = minimize(
+                    neg_sharpe, init_guess, method='SLSQP', bounds=bounds, constraints=cons)
+                weights = opt_results.x
+
+                # Set weights for this date, ensure SPY weight is zero
+                self.portfolio_weights.iloc[i,
+                                            self.price.columns != self.exclude] = weights
+                self.portfolio_weights.iloc[i,
+                                            self.price.columns == self.exclude] = 0.0
+        '''
        # Calculate rolling volatility (standard deviation)
         rolling_volatility = self.returns[assets].rolling(
             window=self.lookback).std()
@@ -109,6 +163,7 @@ class MyPortfolio:
 
         # Include the excluded column with zero weights
         self.portfolio_weights[self.exclude] = 0
+        '''
         """
         TODO: Complete Task 4 Above
         """
