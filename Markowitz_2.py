@@ -76,93 +76,74 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
-        # Calculate log returns
-        log_ret = np.log(self.price / self.price.shift(1))
+        from pypfopt.efficient_frontier import EfficientFrontier
+        from pypfopt import risk_models
+        from pypfopt import expected_returns
 
-        # Define the number of days for annualization
-        days = 252
+        mu = expected_returns.mean_historical_return(
+            self.price[assets])  # returns.mean()*252
+        S = risk_models.sample_cov(self.price[assets])
+        ef = EfficientFrontier(mu, S)
+        weights = ef.max_sharpe(risk_free_rate=0.00)
+        # print(weights)
+        cleaned_weights = ef.clean_weights()
 
-        def get_ret_vol_sr(weights):
-            """
-            Takes in weights, returns array of return, volatility, sharpe ratio
-            """
-            weights = np.array(weights)
-            ret = np.sum(log_ret[assets].mean() * weights) * days
-            vol = np.sqrt(np.dot(weights.T, np.dot(
-                log_ret[assets].cov() * days, weights)))
-            sr = ret / vol
-            return np.array([ret, vol, sr])
-
-        def neg_sharpe(weights):
-            """
-            Returns the negative Sharpe ratio (for minimization)
-            """
-            return get_ret_vol_sr(weights)[2] * -1
-
-        def check_sum(weights):
-            """
-            Returns 0 if sum of weights is 1.0
-            """
-            return np.sum(weights) - 1
-
-        cons = ({'type': 'eq', 'fun': check_sum})
-        bounds = tuple((0, 1) for _ in range(len(assets)))
-        init_guess = [1. / len(assets)] * len(assets)
-
-        for i in range(self.lookback, len(self.price)):
-            if i % self.rebalance_period == 0:
-                # Slice the lookback window
-                lookback_data = log_ret.iloc[i-self.lookback:i]
-
-                # Calculate mean and covariance
-                mean_returns = lookback_data[assets].mean()
-                cov_matrix = lookback_data[assets].cov()
-
-                # Optimize weights using mathematical optimization
-                opt_results = minimize(
-                    neg_sharpe, init_guess, method='SLSQP', bounds=bounds, constraints=cons)
-                weights = opt_results.x
-
-                # Set weights for this date, ensure SPY weight is zero
-                self.portfolio_weights.iloc[i,
-                                            self.price.columns != self.exclude] = weights
-                self.portfolio_weights.iloc[i,
-                                            self.price.columns == self.exclude] = 0.0
-        '''
-       # Calculate rolling volatility (standard deviation)
-        rolling_volatility = self.returns[assets].rolling(
-            window=self.lookback).std()
-
-        # Calculate inverse volatility
-        inverse_volatility = 1 / rolling_volatility
-
-        # Normalize inverse volatilities to sum to 1
-        sum_inverse_volatility = inverse_volatility.sum(axis=1)
-        weights = inverse_volatility.div(sum_inverse_volatility, axis=0)
-
-        # Momentum Strategy: Apply a momentum factor by scaling weights with recent returns
-        momentum = self.returns[assets].rolling(window=self.lookback).mean()
-        momentum_factor = momentum.div(momentum.sum(axis=1), axis=0)
-
-        # Combine Risk Parity and Momentum
-        combined_weights = (1 - self.gamma) * weights + \
-            self.gamma * momentum_factor
-
-        # Rebalance periodically
-        rebalanced_weights = combined_weights.resample(
-            f'{self.rebalance_period}D').first()
-        rebalanced_weights = rebalanced_weights.ffill().reindex(
-            self.price.index).fillna(method='ffill')
-
-        # Ensure weights sum to 1
-        rebalanced_weights = rebalanced_weights.div(
-            rebalanced_weights.sum(axis=1), axis=0)
-
-        # Store the calculated portfolio weights
-        self.portfolio_weights = rebalanced_weights
-
-        # Include the excluded column with zero weights
+        self.portfolio_weights[assets] = [a[1]
+                                          for a in cleaned_weights.items()]
         self.portfolio_weights[self.exclude] = 0
+        '''old
+        # # Calculate log returns
+        # log_ret = np.log(self.price / self.price.shift(1))
+
+        # # Define the number of days for annualization
+        # days = 252
+
+        # def get_ret_vol_sr(weights):
+        #     """
+        #     Takes in weights, returns array of return, volatility, sharpe ratio
+        #     """
+        #     weights = np.array(weights)
+        #     ret = np.sum(log_ret[assets].mean() * weights) * days
+        #     vol = np.sqrt(np.dot(weights.T, np.dot(
+        #         log_ret[assets].cov() * days, weights)))
+        #     sr = ret / vol
+        #     return np.array([ret, vol, sr])
+
+        # def neg_sharpe(weights):
+        #     """
+        #     Returns the negative Sharpe ratio (for minimization)
+        #     """
+        #     return get_ret_vol_sr(weights)[2] * -1
+
+        # def check_sum(weights):
+        #     """
+        #     Returns 0 if sum of weights is 1.0
+        #     """
+        #     return np.sum(weights) - 1
+
+        # cons = ({'type': 'eq', 'fun': check_sum})
+        # bounds = tuple((0, 1) for _ in range(len(assets)))
+        # init_guess = [1. / len(assets)] * len(assets)
+
+        # for i in range(self.lookback, len(self.price)):
+        #     if i % self.rebalance_period == 0:
+        #         # Slice the lookback window
+        #         lookback_data = log_ret.iloc[i-self.lookback:i]
+
+        #         # Calculate mean and covariance
+        #         mean_returns = lookback_data[assets].mean()
+        #         cov_matrix = lookback_data[assets].cov()
+
+        #         # Optimize weights using mathematical optimization
+        #         opt_results = minimize(
+        #             neg_sharpe, init_guess, method='SLSQP', bounds=bounds, constraints=cons)
+        #         weights = opt_results.x
+
+        #         # Set weights for this date, ensure SPY weight is zero
+        #         self.portfolio_weights.iloc[i,
+        #                                     self.price.columns != self.exclude] = weights
+        #         self.portfolio_weights.iloc[i,
+        #                                     self.price.columns == self.exclude] = 0.0
         '''
         """
         TODO: Complete Task 4 Above
